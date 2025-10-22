@@ -64,7 +64,6 @@ Rather than designing a new AI model, this project focuses on **decision-level o
 
 Example applications:
 - **Traffic enforcement:** Minimize false fines (λ high).  
-- **Medical diagnosis:** Minimize missed cases (λ low).
 
 ---
 
