@@ -68,11 +68,4 @@ Example applications:
 
 ---
 
-## 👥 Credits
-Developed by the **Design Science Research Intern Team (2025)**  
-Supervised by **Prof. Pao**  
-Maintained by **Kayla**  
-
----
-
 © 2025 National Chung Cheng University – For academic and educational use only.
