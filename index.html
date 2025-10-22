@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Preference-Guided AI Explorer Demo</title>
+
+  <!-- CDNs -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #f8fafc;            /* slate-50 */
+      --card: #ffffff;
+      --text: #0f172a;          /* slate-900 */
+      --muted: #64748b;         /* slate-500/600 */
+      --border: #e2e8f0;        /* slate-200 */
+      --teal: #0d9488;
+      --teal-600: #0d9488;
+      --teal-700: #0f766e;
+      --ink-2: #1e293b;
+      --accent: #06b6d4;        /* cyan-500 */
+      --ring: rgba(13,148,136,.25);
+      --grid: rgba(2,6,23,.08);
+      --chip: #ecfeff;
+    }
+    .dark {
+      --bg: #0b1220;            /* custom deep */
+      --card: #0f172a;          /* slate-900 */
+      --text: #e5e7eb;          /* slate-200 */
+      --muted: #94a3b8;         /* slate-400 */
+      --border: #1f2937;        /* gray-800 */
+      --teal: #2dd4bf;
+      --teal-600: #14b8a6;
+      --teal-700: #0ea5a1;
+      --ink-2: #cbd5e1;
+      --accent: #22d3ee;
+      --ring: rgba(34,211,238,.25);
+      --grid: rgba(226,232,240,.08);
+      --chip: #042f2e;
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 600px at 70% -10%, rgba(13,148,136,.10), transparent 60%), var(--bg);
+      color: var(--text);
+    }
+
+    /* Cards */
+    .card {
+      background: linear-gradient(var(--card), var(--card)) padding-box,
+                  linear-gradient(120deg, rgba(13,148,136,.25), rgba(6,182,212,.25)) border-box;
+      border: 1px solid transparent;
+      border-radius: 1rem;
+      padding: 1.25rem;
+      box-shadow: 0 1px 0 rgba(2,6,23,.05), 0 10px 20px rgba(2,6,23,.04);
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .card:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(2,6,23,.08); }
+
+    /* Buttons */
+    .btn { display:inline-flex; align-items:center; gap:.5rem; border-radius:.75rem; padding:.6rem .9rem; border:1px solid var(--border); background: var(--card); color: var(--ink-2); transition: all .18s ease; }
+    .btn:hover { background: color-mix(in srgb, var(--card) 92%, var(--text)); }
+    .btn:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+    .btn[disabled] { opacity:.5; cursor:not-allowed; }
+    .btn-primary { background: linear-gradient(180deg, var(--teal-600), var(--teal-700)); color:white; border-color: transparent; box-shadow: 0 4px 14px rgba(13,148,136,.25); }
+    .btn-primary:hover { filter: saturate(1.05) brightness(1.05); }
+    .chip { display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.25rem .55rem; border-radius:9999px; background: var(--chip); border:1px solid var(--border); color: var(--ink-2); }
+    .muted { color: var(--muted); }
+
+    /* Slider */
+    input[type=range] { appearance: none; width: 100%; height: .4rem; border-radius: 9999px; background: linear-gradient(90deg, var(--teal) 0%, var(--accent) 100%); opacity:.35; }
+    input[type=range]:hover { opacity:.5; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: white; border: 3px solid var(--teal); border-radius: 9999px; box-shadow: 0 4px 10px rgba(2,6,23,.15); }
+    input[type=range]::-moz-range-thumb { width: 22px; height: 22px; background: white; border: 3px solid var(--teal); border-radius: 9999px; box-shadow: 0 4px 10px rgba(2,6,23,.15); }
+
+    .table-row-interactive { cursor: pointer; }
+    .table-row-interactive:hover { background-color: color-mix(in srgb, var(--card) 70%, var(--teal)); }
+    .table-row-selected { background-color: color-mix(in srgb, var(--card) 70%, var(--accent)) !important; font-weight: 700; }
+    .mono { font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace; }
+
+    .chart-container { position: relative; width: 100%; max-width: 1100px; margin-inline: auto; height: 380px; max-height: 55vh; }
+    .lambda-sweep-container { width: 100%; max-width: 1100px; margin: 0 auto; height: 320px; }
+    @media (max-width: 1024px) { .chart-container { height: 420px; } .lambda-sweep-container { height: 280px; } }
+
+    /* Header gradient title */
+    .title-grad { background: linear-gradient(90deg, var(--text), var(--teal)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    /* Toasts */
+    #toaster { position: fixed; right: 1rem; top: 4.5rem; display: grid; gap: .5rem; z-index: 60; }
+    .toast { background: var(--card); border:1px solid var(--border); color: var(--ink-2); padding: .6rem .8rem; border-radius:.75rem; box-shadow: 0 10px 24px rgba(2,6,23,.18); animation: slideIn .18s ease; }
+    @keyframes slideIn { from { transform: translateY(-6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  </style>
+</head>
+
+<body class="antialiased">
+<div id="toaster" aria-live="polite" aria-atomic="true"></div>
+
+<header class="bg-white/60 dark:bg-black/30 backdrop-blur-xl sticky top-0 z-50 border-b" style="border-color:var(--border)">
+  <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center h-16">
+      <h1 class="text-xl font-bold title-grad tracking-tight">
+        Preference-Guided AI — Explorer
+      </h1>
+
+      <div class="flex items-center gap-2">
+        <button id="reset-btn" class="btn" title="Reset to demo defaults">
+          <span>Reset</span>
+        </button>
+        <button id="theme-toggle" class="btn" title="Toggle dark mode" aria-pressed="false">
+          <span class="mono">◎</span><span class="hidden sm:inline">Theme</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<main>
+  <!-- Top controls (Totals + CSV) -->
+  <section class="py-8 sm:py-10">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Dataset totals -->
+        <div class="card">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold">Dataset Totals</h3>
+              <p class="text-sm muted">Used to compute Precision, Recall, F1, Specificity &amp; FPR.</p>
+            </div>
+            <span class="chip"><span class="mono">P</span>/<span class="mono">N</span></span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 mt-3">
+            <div>
+              <label for="total-P" class="text-sm font-medium">Total Positives (P)</label>
+              <input id="total-P" type="number" min="0" step="1" value="100" class="mt-1 w-full border rounded-lg px-3 py-2 bg-white/70 dark:bg-white/5" style="border-color:var(--border)" />
+            </div>
+            <div>
+              <label for="total-N" class="text-sm font-medium">Total Negatives (N)</label>
+              <input id="total-N" type="number" min="0" step="1" value="100" class="mt-1 w-full border rounded-lg px-3 py-2 bg-white/70 dark:bg-white/5" style="border-color:var(--border)" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between mt-3">
+            <p id="total-hint" class="text-sm muted"></p>
+            <button id="suggest-totals" class="btn">Suggest minima</button>
+          </div>
+        </div>
+
+        <!-- CSV -->
+        <div class="card">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 class="text-lg font-semibold">Upload CSV</h3>
+              <p class="text-sm muted">Header: <span class="mono">Artifact, FP, FN, P, N</span>. Only <span class="mono">__TOTALS__</span> row sets P &amp; N.</p>
+            </div>
+            <button id="download-template" class="btn">Template CSV</button>
+          </div>
+          <input type="file" id="csv-upload" accept=".csv" class="mt-3 text-sm">
+          <p id="csv-status" class="mt-2 text-sm"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Cost chart + Insights (Interpretation + Lambda slider) -->
+  <section id="simulator" class="py-6 sm:py-8">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 lg:gap-12">
+        <!-- Cost chart -->
+        <div class="lg:col-span-2">
+          <div class="card">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">Interactive Cost Analysis</h3>
+              <span id="ec-caption" class="chip">E[C] @ λ = 2.1</span>
+            </div>
+            <div class="chart-container mt-3">
+              <canvas id="costChart" aria-label="Cost bar chart" role="img"></canvas>
+            </div>
+            <p id="margin-note" class="mt-3 text-sm muted"></p>
+          </div>
+        </div>
+
+        <!-- Sticky insights column -->
+        <div class="flex flex-col gap-6 lg:sticky lg:top-24">
+          <div id="interpretation-card" class="card">
+            <h4 class="text-lg font-semibold">Insights</h4>
+            <div id="interpretation-text" class="mt-2 text-sm" aria-live="polite"></div>
+          </div>
+
+          <div class="card">
+            <div class="flex items-center justify-between">
+              <label for="lambda-slider" class="block text-lg font-semibold">Preference Ratio (λ)</label>
+              <span id="lambda-value" class="chip"><span class="mono">λ</span> = 2.1</span>
+            </div>
+            <p class="text-sm muted mt-1">How costly is a False Positive relative to a False Negative?</p>
+            <div class="flex items-center gap-3 mt-3">
+              <span class="text-xs mono">0.1</span>
+              <input id="lambda-slider" type="range" min="0.1" max="10" step="0.1" value="2.1" aria-label="Lambda slider" />
+              <span class="text-xs mono">10</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="mt-10 card">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xl font-semibold">Artifact Table</h3>
+          <span class="chip">Click a row to see implied λ-range</span>
+        </div>
+
+        <div class="mt-4 flow-root">
+          <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+            <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+              <table class="min-w-full divide-y" style="border-color:var(--border)">
+                <thead>
+                  <tr>
+                    <th data-sort="artifact"   class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold sm:pl-0 cursor-pointer">Artifact<span class="ml-1 text-xs muted" id="sort-indicator-artifact"></span></th>
+                    <th data-sort="fp"         class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">FP<span class="ml-1 text-xs muted" id="sort-indicator-fp"></span></th>
+                    <th data-sort="fn"         class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">FN<span class="ml-1 text-xs muted" id="sort-indicator-fn"></span></th>
+                    <th data-sort="tp"         class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">TP<span class="ml-1 text-xs muted" id="sort-indicator-tp"></span></th>
+                    <th data-sort="tn"         class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">TN<span class="ml-1 text-xs muted" id="sort-indicator-tn"></span></th>
+                    <th data-sort="ec"         class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer" id="ec-header">E[C]<span class="ml-1 text-xs muted" id="sort-indicator-ec"></span></th>
+                    <th data-sort="precision"  class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">Precision<span class="ml-1 text-xs muted" id="sort-indicator-precision"></span></th>
+                    <th data-sort="recall"     class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">Recall<span class="ml-1 text-xs muted" id="sort-indicator-recall"></span></th>
+                    <th data-sort="f1"         class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">F1<span class="ml-1 text-xs muted" id="sort-indicator-f1"></span></th>
+                    <th data-sort="fpr"        class="px-3 py-3.5 text-left text-sm font-semibold cursor-pointer">FPR<span class="ml-1 text-xs muted" id="sort-indicator-fpr"></span></th>
+                  </tr>
+                </thead>
+                <tbody id="artifact-table-body" class="divide-y" style="border-color:var(--border)"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="inference-result" class="mt-6 p-4 rounded-lg" style="background: color-mix(in srgb, var(--chip) 70%, var(--card)); border:1px solid var(--border); display:none;">
+          <h4 class="font-semibold">Implied Preference Analysis</h4>
+          <p id="inference-text" class="mt-1"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PR / ROC -->
+  <section class="py-10 sm:py-12">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="card">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+          <h3 class="text-lg font-semibold">Quality Metrics — PR / ROC</h3>
+          <div class="flex items-center gap-4">
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="radio" name="metrics-mode" value="pr" checked /> Precision–Recall
+            </label>
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="radio" name="metrics-mode" value="roc" /> ROC (TPR vs FPR)
+            </label>
+          </div>
+        </div>
+        <p class="text-sm muted mt-1">Each artifact is a single operating point (no thresholds). Totals (P, N) affect derived metrics.</p>
+        <div class="chart-container mt-4" style="height: 380px;">
+          <canvas id="metricsChart" aria-label="PR/ROC chart" role="img"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lambda sweep -->
+  <section id="lambda-sweep" class="py-12 sm:py-16">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-bold">Lambda Sweep Explorer</h2>
+        <p class="muted mt-2">Exact regions where each artifact is optimal over the λ range.</p>
+      </div>
+
+      <div class="flex items-center justify-center gap-3">
+        <button id="run-sweep" class="btn-primary">Compute Optimal Regions</button>
+        <span class="chip">λ range: <span class="mono" id="lambda-range-label">[0.1, 10]</span></span>
+      </div>
+
+      <!-- Hidden by default; shown when clicking the button -->
+      <div id="sweep-card" class="mt-10 card hidden">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <h3 class="text-lg font-semibold">Optimal Artifact vs. λ (stepped)</h3>
+          <div class="flex items-center gap-3">
+            <button id="export-sweep-png"   class="btn">Sweep Chart PNG</button>
+            <button id="export-regions-csv" class="btn">λ-Regions CSV</button>
+          </div>
+        </div>
+        <div class="lambda-sweep-container">
+          <canvas id="lambdaSweepChart" aria-label="Lambda sweep chart" role="img"></canvas>
+        </div>
+
+        <div class="mt-6">
+          <h4 class="font-semibold">Optimal Regions (Exact)</h4>
+          <div class="-mx-4 -my-2 overflow-x-auto sm:-mx-6 lg:-mx-8 mt-2">
+            <div class="inline-block min-w-full py-2 align-middle sm:px-6 lg:px-8">
+              <table class="min-w-full divide-y" style="border-color:var(--border)">
+                <thead>
+                  <tr>
+                    <th class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold sm:pl-0">λ Interval</th>
+                    <th class="px-3 py-3.5 text-left text-sm font-semibold">Optimal Artifact</th>
+                  </tr>
+                </thead>
+                <tbody id="region-table-body" class="divide-y" style="border-color:var(--border)"></tbody>
+              </table>
+            </div>
+          </div>
+          <p id="region-note" class="text-sm muted mt-2"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Export (end of page) -->
+  <section class="pb-16">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="card">
+        <div class="flex items-center justify-between flex-wrap gap-3">
+          <h3 class="text-lg font-semibold">Export</h3>
+          <p class="text-sm muted">Download the current view and data.</p>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+          <button id="export-csv" class="btn">Download Table CSV</button>
+          <button id="export-json" class="btn">Download State JSON</button>
+          <button id="export-cost-png" class="btn">Cost Chart PNG</button>
+          <button id="export-metrics-png" class="btn">PR/ROC Chart PNG</button>
+        </div>
+        <p class="text-xs muted mt-3">Sweep PNG and λ-Regions appear above once you compute regions.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="border-t" style="border-color:var(--border)">
+  <div class="container mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center muted">
+    <p>&copy; Created by Junaid Zia</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- THEME ----------
+  const root = document.documentElement;
+  const themeToggle = document.getElementById('theme-toggle');
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+    root.classList.add('dark');
+    themeToggle.setAttribute('aria-pressed','true');
+  }
+  themeToggle.addEventListener('click', () => {
+    root.classList.toggle('dark');
+    const isDark = root.classList.contains('dark');
+    themeToggle.setAttribute('aria-pressed', String(isDark));
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    applyChartTheme(); // recolor grids/labels
+  });
+
+  // ---------- TOAST ----------
+  const toaster = document.getElementById('toaster');
+  function toast(msg){
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    toaster.appendChild(el);
+    setTimeout(()=>{ el.style.opacity = '0'; el.style.transform='translateY(-6px)'; }, 2200);
+    setTimeout(()=> el.remove(), 2600);
+  }
+
+  // ---------- STATE ----------
+  const sliderMin = 0.1, sliderMax = 10.0;
+  let artifactData = [
+    { name: 'Artifact 1', fp: 50, fn: 10 },
+    { name: 'Artifact 2', fp: 40, fn: 12 },
+    { name: 'Artifact 3', fp: 30, fn: 25 },
+    { name: 'Artifact 4', fp: 20, fn: 30 },
+    { name: 'Artifact 5', fp: 10, fn: 50 },
+  ];
+  let totals = { P: 100, N: 100 };
+  let currentLambda = 2.1;
+
+  // Sort state for the table
+  let sortKey = 'ec';
+  let sortDir = 'asc'; // 'asc' | 'desc'
+
+  // Charts + sweep cache
+  let costChart = null, metricsChart = null;
+  let lambdaSweepChart = null;
+  let lastSweepRegions = null;
+
+  // ---------- ELS ----------
+  const lambdaSlider = document.getElementById('lambda-slider');
+  const lambdaValueDisplay = document.getElementById('lambda-value');
+  const ecCaption = document.getElementById('ec-caption');
+  const ecHeader  = document.getElementById('ec-header');
+  const interpretationText = document.getElementById('interpretation-text');
+  const marginNote = document.getElementById('margin-note');
+  const artifactTableBody = document.getElementById('artifact-table-body');
+  const inferenceText = document.getElementById('inference-text');
+  const inferenceResult = document.getElementById('inference-result');
+
+  const totalPInput = document.getElementById('total-P');
+  const totalNInput = document.getElementById('total-N');
+  const totalHint   = document.getElementById('total-hint');
+  const suggestBtn  = document.getElementById('suggest-totals');
+
+  const csvInput = document.getElementById('csv-upload');
+  const csvStatus = document.getElementById('csv-status');
+  const templateBtn = document.getElementById('download-template');
+
+  const lambdaRangeLabel = document.getElementById('lambda-range-label');
+  const runSweepBtn = document.getElementById('run-sweep');
+  const sweepCard = document.getElementById('sweep-card');
+
+  // Export buttons
+  const exportCsvBtn     = document.getElementById('export-csv');
+  const exportJsonBtn    = document.getElementById('export-json');
+  const exportCostPngBtn = document.getElementById('export-cost-png');
+  const exportMetPngBtn  = document.getElementById('export-metrics-png');
+  const exportSweepPngBtn= document.getElementById('export-sweep-png');
+  const exportRegionsBtn = document.getElementById('export-regions-csv');
+  const resetBtn = document.getElementById('reset-btn');
+
+  // ---------- HELPERS ----------
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const fmt = (x, d=2) => Number.isFinite(x) ? Number(x).toFixed(d) : '—';
+  const safeInt = (v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n >= 0 ? n : NaN;
+  };
+  const calculateCost = (fp, fn, lambda) => (lambda * fp) + fn;
+
+  function bestArtifacts(costs) {
+    const minCost = Math.min(...costs);
+    const bestIdx = costs.indexOf(minCost);
+    const sorted = costs.map((c,i)=>({c,i})).sort((a,b)=>a.c-b.c);
+    const second = sorted[1] || {c: NaN, i: -1};
+    return { bestIdx, minCost, secondIdx: second.i, secondCost: second.c };
+  }
+
+  function suggestTotalsText() {
+    const maxFN = Math.max(0, ...artifactData.map(a => a.fn));
+    const maxFP = Math.max(0, ...artifactData.map(a => a.fp));
+    return `Suggested minima — P ≥ ${maxFN}, N ≥ ${maxFP}`;
+  }
+
+  function sanitizeArtifacts(raw) {
+    return raw.filter(r =>
+      r && r.name && Number.isFinite(r.fp) && Number.isFinite(r.fn) && r.fp >= 0 && r.fn >= 0
+    );
+  }
+
+  // Confusion matrix + metrics
+  function deriveCounts(art, P, N) {
+    const TP = P - art.fn;
+    const TN = N - art.fp;
+    return { TP, TN, FP: art.fp, FN: art.fn };
+  }
+  function metricsFromCounts({TP, FP, FN, TN}) {
+    const precision = (TP + FP) > 0 ? TP / (TP + FP) : NaN;
+    const recall    = (TP + FN) > 0 ? TP / (TP + FN) : NaN; // TPR
+    const f1        = (precision + recall) > 0 ? 2 * (precision*recall) / (precision + recall) : NaN;
+    const specificity = (TN + FP) > 0 ? TN / (TN + FP) : NaN;
+    const fpr       = (TN + FP) > 0 ? FP / (TN + FP) : NaN;
+    return { precision, recall, f1, specificity, fpr };
+  }
+
+  // CSV escape
+  const csvEscape = (v) => {
+    const s = String(v ?? '');
+    return (/[",\n]/.test(s)) ? '"' + s.replace(/"/g,'""') + '"' : s;
+  };
+
+  // ---------- EXPORT ----------
+  function downloadBlob(content, filename, type='text/plain') {
+    const blob = new Blob([content], {type});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 250);
+  }
+  function downloadCanvasPNG(canvasId, filename) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  function exportTableCSV() {
+    const P = totals.P, N = totals.N;
+    const costs = artifactData.map(d => calculateCost(d.fp, d.fn, currentLambda));
+    const rows = [["Artifact","FP","FN","TP","TN",`E[C] @ λ=${fmt(currentLambda,1)}`,"Precision","Recall","F1","FPR"]];
+    const maxFN = Math.max(0, ...artifactData.map(a => a.fn));
+    const maxFP = Math.max(0, ...artifactData.map(a => a.fp));
+    const valid = Number.isFinite(P) && Number.isFinite(N) && P >= maxFN && N >= maxFP;
+
+    artifactData.forEach((a,i)=>{
+      const {TP, TN, FP, FN} = deriveCounts(a, P, N);
+      const m = valid && TP>=0 && TN>=0 ? metricsFromCounts({TP,FP,FN,TN}) : {precision:'', recall:'', f1:'', fpr:''};
+      rows.push([a.name, FP, FN, valid?TP:'', valid?TN:'', fmt(costs[i]), fmt(m.precision,3), fmt(m.recall,3), fmt(m.f1,3), fmt(m.fpr,3)]);
+    });
+    downloadBlob(rows.map(r=>r.map(csvEscape).join(',')).join('\n'), 'artifact_table.csv', 'text/csv');
+    toast('Downloaded table CSV');
+  }
+  function exportStateJSON() {
+    const state = { lambda: currentLambda, totals, artifacts: artifactData, timestamp: new Date().toISOString(), sweepRegions: lastSweepRegions };
+    downloadBlob(JSON.stringify(state, null, 2), 'lambda_state.json', 'application/json');
+    toast('Saved state JSON');
+  }
+  function exportRegionsCSV() {
+    if (!lastSweepRegions?.length) { toast('Run the sweep first'); return; }
+    const rows = [["lambda_start","lambda_end","optimal_index","optimal_artifact"]];
+    for (const r of lastSweepRegions) rows.push([fmt(r.start), fmt(r.end), r.index+1, r.name]);
+    downloadBlob(rows.map(r=>r.join(',')).join('\n'), 'lambda_regions.csv', 'text/csv');
+    toast('Downloaded λ-regions CSV');
+  }
+
+  // ---------- CSV handling ----------
+  templateBtn.addEventListener('click', () => {
+    const rows = [
+      ['Artifact','FP','FN','P','N'],
+      ['Model A', 12, 34, '', ''],
+      ['Model B', 20, 22, '', ''],
+      ['Model C', 5, 45,  '', ''],
+      ['__TOTALS__', '', '', 120, 180]
+    ];
+    downloadBlob(rows.map(r=>r.join(',')).join('\n'), 'lambda_template.csv', 'text/csv');
+    toast('Template CSV downloaded');
+  });
+
+  csvInput.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results) => {
+        try {
+          const parsed = results.data;
+          if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('Empty CSV.');
+
+          let newTotals = { ...totals };
+          const mapped = [];
+          for (const row of parsed) {
+            const key = (k) => Object.keys(row).find(x => x && x.toLowerCase() === k);
+            const artK = key('artifact'), fpK = key('fp'), fnK = key('fn'), pK = key('p'), nK = key('n');
+            if (!artK) continue;
+            const name = String(row[artK]).trim();
+            const parseCell = (k) => (k && String(row[k]).trim() !== '' ? parseFloat(row[k]) : NaN);
+
+            if (name.toUpperCase() === '__TOTALS__') {
+              const P = parseCell(pK), N = parseCell(nK);
+              if (Number.isFinite(P)) newTotals.P = Math.max(0, Math.floor(P));
+              if (Number.isFinite(N)) newTotals.N = Math.max(0, Math.floor(N));
+            } else {
+              const fp = parseCell(fpK), fn = parseCell(fnK);
+              mapped.push({ name, fp, fn });
+            }
+          }
+
+          const cleaned = sanitizeArtifacts(mapped);
+          if (cleaned.length !== mapped.length) throw new Error("Invalid rows: need non-negative numeric FP/FN & a name.");
+
+          artifactData = cleaned;
+          totals = newTotals;
+          totalPInput.value = totals.P; totalNInput.value = totals.N;
+          csvStatus.textContent = `Loaded ${artifactData.length} artifacts. Totals P=${totals.P}, N=${totals.N}.`;
+          csvStatus.className = "mt-2 text-sm";
+          toast('CSV loaded');
+
+          // Reset sweep
+          sweepCard.classList.add('hidden');
+          lambdaSweepChart && lambdaSweepChart.destroy(); lambdaSweepChart = null;
+          lastSweepRegions = null;
+
+          updateAll();
+        } catch (e) {
+          csvStatus.textContent = "CSV error: " + e.message;
+          csvStatus.className = "mt-2 text-sm";
+          toast('CSV error');
+        }
+      },
+      error: (err) => {
+        csvStatus.textContent = "CSV parse error: " + (err?.message || String(err));
+        csvStatus.className = "mt-2 text-sm";
+        toast('CSV parse error');
+      }
+    });
+  });
+
+  // ---------- λ inference ----------
+  function inferLambda(preferredIndex) {
+    const p = artifactData[preferredIndex];
+    if (!p) return;
+
+    let lowers = [], uppers = [], neverOptimal = false;
+    for (let i = 0; i < artifactData.length; i++) {
+      if (i === preferredIndex) continue;
+      const c = artifactData[i];
+      const A = p.fp - c.fp;
+      const B = c.fn - p.fn;
+      if (A === 0) {
+        if (B < 0) { neverOptimal = true; break; }
+        continue;
+      }
+      const bound = B / A;
+      if (A > 0) uppers.push(bound); else lowers.push(bound);
+    }
+    const maxLower = lowers.length ? Math.max(...lowers) : -Infinity;
+    const minUpper = uppers.length ? Math.min(...uppers) : Infinity;
+    const L = Math.max(maxLower, sliderMin);
+    const U = Math.min(minUpper, sliderMax);
+
+    let html = `For <strong>${p.name}</strong> to be optimal, λ must satisfy: `;
+    if (neverOptimal || L > U) {
+      html += `<span class="text-red-600 font-semibold">Never optimal in [${fmt(sliderMin)}, ${fmt(sliderMax)}].</span>`;
+    } else {
+      const parts = [];
+      if (isFinite(L) && L > sliderMin) parts.push(`λ ≥ ${fmt(L)}`);
+      if (isFinite(U) && U < sliderMax) parts.push(`λ ≤ ${fmt(U)}`);
+      if (!parts.length) parts.push(`all λ in [${fmt(sliderMin)}, ${fmt(sliderMax)}]`);
+      html += `<span class="font-semibold">${parts.join(' & ')}</span>`;
+    }
+    inferenceText.innerHTML = html;
+    inferenceResult.style.display = 'block';
+  }
+
+  // ---------- CHARTS ----------
+  function chartColors(){ // pull from CSS vars
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      teal: cs.getPropertyValue('--teal').trim() || '#0d9488',
+      grid: cs.getPropertyValue('--grid').trim() || 'rgba(2,6,23,.08)',
+      text: cs.getPropertyValue('--text').trim() || '#0f172a',
+      muted: cs.getPropertyValue('--muted').trim() || '#64748b',
+    };
+  }
+
+  function createCostChart() {
+    const ctx = document.getElementById('costChart').getContext('2d');
+    const c = chartColors();
+    costChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: [], datasets: [{ label:'Expected Cost', data: [], backgroundColor: [], borderColor: [], borderWidth: 2 }] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        scales:{
+          x:{ grid:{ color:c.grid }, ticks:{ color:c.muted } },
+          y:{ beginAtZero:true, title:{ display:true, text:'Expected Cost', color:c.muted }, grid:{ color:c.grid }, ticks:{ color:c.muted } }
+        },
+        plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(pt)=>`Cost: ${fmt(pt.parsed.y)}` } } }
+      }
+    });
+  }
+
+  function updateCostChart(costs, optimalIndex) {
+    const c = chartColors();
+    costChart.data.labels = artifactData.map(d => d.name);
+    costChart.data.datasets[0].data = costs;
+    costChart.data.datasets[0].backgroundColor = costs.map((_,i)=> i===optimalIndex ? c.teal+'99' : 'rgba(148,163,184,0.35)');
+    costChart.data.datasets[0].borderColor     = costs.map((_,i)=> i===optimalIndex ? c.teal : 'rgba(148,163,184,0.9)');
+    costChart.options.scales.x.grid.color = c.grid;
+    costChart.options.scales.y.grid.color = c.grid;
+    costChart.update();
+  }
+
+  function createMetricsChart() {
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    const c = chartColors();
+    metricsChart = new Chart(ctx, {
+      type: 'scatter',
+      data: { datasets: [] },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins: {
+          legend:{ position:'right', labels:{ color:c.muted }},
+          tooltip:{ callbacks:{ label: (ctx) => {
+            const d = ctx.raw; return `${d.name}: x=${fmt(d.x)}, y=${fmt(d.y)}`;
+          }}}
+        },
+        scales: {
+          x: { title:{ display:true, text:'Recall (PR) or FPR (ROC)', color:c.muted }, min:0, max:1, grid:{ color:c.grid }, ticks:{ color:c.muted } },
+          y: { title:{ display:true, text:'Precision (PR) or TPR (ROC)', color:c.muted }, min:0, max:1, grid:{ color:c.grid }, ticks:{ color:c.muted } }
+        }
+      }
+    });
+  }
+
+  function updateMetricsChart(mode='pr') {
+    const P = totals.P, N = totals.N;
+    const maxFN = Math.max(0, ...artifactData.map(a => a.fn));
+    const maxFP = Math.max(0, ...artifactData.map(a => a.fp));
+    if (!Number.isFinite(P) || !Number.isFinite(N) || P < maxFN || N < maxFP) {
+      metricsChart.data.datasets = [];
+      metricsChart.update();
+      return;
+    }
+    const datasets = artifactData.map((a,i) => {
+      const {TP, TN, FP, FN} = deriveCounts(a, P, N);
+      const m = metricsFromCounts({TP,FP,FN,TN});
+      const point = mode === 'pr' ? { x: m.recall, y: m.precision } : { x: m.fpr, y: m.recall };
+      return { label: a.name, data: [{...point, name: a.name, idx:i}], showLine:false, pointRadius: 5 };
+    });
+    const c = chartColors();
+    metricsChart.options.scales.x.title.text = (mode === 'pr') ? 'Recall' : 'FPR';
+    metricsChart.options.scales.y.title.text = (mode === 'pr') ? 'Precision' : 'TPR (Recall)';
+    metricsChart.options.plugins.legend.labels.color = c.muted;
+    metricsChart.options.scales.x.grid.color = c.grid;
+    metricsChart.options.scales.y.grid.color = c.grid;
+    metricsChart.data.datasets = datasets;
+    metricsChart.update();
+  }
+
+  function applyChartTheme(){
+    if (costChart) updateAll(); // quick way to refresh styles and data
+  }
+
+  // ----- Sweep -----
+  const uniqueSorted = (values, eps=1e-9) => {
+    const arr = Array.from(values).sort((a,b)=>a-b); const out=[];
+    for (const v of arr) if (!out.length || Math.abs(out[out.length-1]-v) > eps) out.push(v);
+    return out;
+  };
+  function computeBreakpoints(arts) {
+    const pts = new Set();
+    for (let i=0;i<arts.length;i++) for (let j=i+1;j<arts.length;j++) {
+      const di=arts[i], dj=arts[j], denom=(di.fp-dj.fp);
+      if (denom===0) continue;
+      const lam=(dj.fn-di.fn)/denom;
+      if (Number.isFinite(lam)) pts.add(lam);
+    }
+    const internal = uniqueSorted([...pts].filter(v => v > (sliderMin-1e-9) && v < (sliderMax+1e-9)));
+    return uniqueSorted([sliderMin, ...internal, sliderMax]);
+  }
+  function optimalIdxAt(lambda) {
+    const costs = artifactData.map(d => calculateCost(d.fp, d.fn, lambda));
+    return costs.indexOf(Math.min(...costs));
+  }
+  function computeOptimalRegions() {
+    if (!artifactData.length) return { boundaries:[], regions:[] };
+    const bounds = computeBreakpoints(artifactData);
+    const regions = [];
+    for (let k=0;k<bounds.length-1;k++){
+      const a=bounds[k], b=bounds[k+1], mid=(a+b)/2, idx=optimalIdxAt(mid);
+      regions.push({ start:a, end:b, index:idx, name:artifactData[idx].name });
+    }
+    return { boundaries:bounds, regions };
+  }
+  function renderSweepChart(regions) {
+    const ctx = document.getElementById('lambdaSweepChart').getContext('2d');
+    lambdaSweepChart && lambdaSweepChart.destroy();
+    const c = chartColors();
+    const xVals=[], yVals=[];
+    for (const r of regions){ xVals.push(r.start, r.end); yVals.push(r.index+1, r.index+1); }
+    lambdaSweepChart = new Chart(ctx, {
+      type:'line',
+      data:{ labels: xVals.map(v=>fmt(v,2)), datasets:[{ label:'Optimal Artifact Index', data:yVals, borderColor:c.teal, backgroundColor:c.teal, fill:false, pointRadius:0, tension:0, stepped:true }] },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false}, tooltip:{ intersect:false, callbacks:{ label:(c)=> {
+          const x=parseFloat(c.label); const r=regions.find(R=>x>=R.start-1e-6 && x<=R.end+1e-6);
+          return r ? `λ ∈ [${fmt(r.start)}, ${fmt(r.end)}]: ${r.name} (#${r.index+1})` : `λ = ${fmt(x)}`;
+        }}}},
+        scales:{ x:{ title:{display:true, text:'Lambda (λ)'}, grid:{color:chartColors().grid} },
+                y:{ title:{display:true, text:'Optimal Index'}, ticks:{stepSize:1}, suggestedMin:1, suggestedMax:Math.max(1,artifactData.length), grid:{color:chartColors().grid} } }
+      }
+    });
+  }
+  function renderRegionTable(regions) {
+    const body = document.getElementById('region-table-body');
+    const note = document.getElementById('region-note');
+    body.innerHTML = '';
+    if (!regions.length) { body.innerHTML = `<tr><td class="py-3.5 pl-4 pr-3 text-sm sm:pl-0" colspan="2">No regions to display.</td></tr>`; return; }
+    for (const r of regions) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="whitespace-nowrap py-3.5 pl-4 pr-3 text-sm sm:pl-0 mono">[${fmt(r.start)}, ${fmt(r.end)}]</td>
+        <td class="whitespace-nowrap px-3 py-3.5 text-sm">${r.name} <span class="muted">(index ${r.index+1})</span></td>`;
+      body.appendChild(tr);
+    }
+    note.textContent = "Intervals are closed-left, open-right, except the last which includes the upper bound.";
+  }
+  function computeAndRenderSweep() {
+    lambdaRangeLabel.textContent = `[${fmt(sliderMin)}, ${fmt(sliderMax)}]`;
+    const { regions } = computeOptimalRegions();
+    renderSweepChart(regions);
+    renderRegionTable(regions);
+    lastSweepRegions = regions;
+  }
+
+  // ---------- TABLE RENDER + SORT ----------
+  function headerSortUI(){
+    const ids = ['artifact','fp','fn','tp','tn','ec','precision','recall','f1','fpr'];
+    ids.forEach(id=>{
+      const span = document.getElementById('sort-indicator-' + id);
+      if (!span) return;
+      if (id === sortKey) span.textContent = sortDir === 'asc' ? '▲' : '▼';
+      else span.textContent = '';
+    });
+  }
+
+  function renderTable(costs, optimalIndex) {
+    artifactTableBody.innerHTML = '';
+    const P = totals.P, N = totals.N;
+    const rows = artifactData.map((d, i) => {
+      const {TP, TN, FP, FN} = deriveCounts(d, P, N);
+      const invalid = (!Number.isFinite(P) || !Number.isFinite(N) || P<0 || N<0 || TP<0 || TN<0);
+      const m = invalid ? null : metricsFromCounts({TP,FP,FN,TN});
+      return {
+        idx:i, name:d.name, FP, FN, TP: invalid?'—':TP, TN: invalid?'—':TN,
+        ec: calculateCost(d.fp, d.fn, currentLambda),
+        precision: invalid?NaN:m.precision, recall: invalid?NaN:m.recall, f1: invalid?NaN:m.f1, fpr: invalid?NaN:m.fpr,
+        invalid
+      };
+    });
+
+    // sort
+    rows.sort((a,b)=>{
+      const k = sortKey;
+      const va = (k==='artifact') ? a.name : a[k];
+      const vb = (k==='artifact') ? b.name : b[k];
+      const na = typeof va === 'number' ? va : (isNaN(parseFloat(va))? va : parseFloat(va));
+      const nb = typeof vb === 'number' ? vb : (isNaN(parseFloat(vb))? vb : parseFloat(vb));
+      const cmp = (typeof na === 'number' && typeof nb === 'number') ? (na-nb) : String(na).localeCompare(String(nb));
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    const minCost = Math.min(...costs);
+    rows.forEach((r) => {
+      const row = document.createElement('tr');
+      row.className = 'table-row-interactive';
+      row.tabIndex = 0;
+      if (r.ec === minCost) row.classList.add('text-emerald-600','font-semibold');
+
+      row.innerHTML = `
+        <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-0">${r.name}${r.invalid? ' <span class="mono muted">(!)</span>':''}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${r.FP}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${r.FN}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${r.TP}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${r.TN}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${fmt(r.ec)}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${isNaN(r.precision)? '—' : fmt(r.precision,3)}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${isNaN(r.recall)? '—' : fmt(r.recall,3)}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${isNaN(r.f1)? '—' : fmt(r.f1,3)}</td>
+        <td class="whitespace-nowrap px-3 py-4 text-sm">${isNaN(r.fpr)? '—' : fmt(r.fpr,3)}</td>
+      `;
+
+      const selectRow = () => {
+        document.querySelectorAll('#artifact-table-body tr').forEach(rr => rr.classList.remove('table-row-selected'));
+        row.classList.add('table-row-selected');
+        if (!r.invalid) inferLambda(r.idx);
+      };
+      row.addEventListener('click', selectRow);
+      row.addEventListener('keydown', (e) => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); selectRow(); }});
+      artifactTableBody.appendChild(row);
+    });
+
+    // header sort UI
+    headerSortUI();
+
+    // bind header click (once)
+    document.querySelectorAll('thead th[data-sort]').forEach(th=>{
+      if (th.dataset.bound === '1') return;
+      th.dataset.bound = '1';
+      th.addEventListener('click', () => {
+        const k = th.getAttribute('data-sort');
+        if (sortKey === k) sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+        else { sortKey = k; sortDir = 'asc'; }
+        updateAll();
+      });
+    });
+  }
+
+  function updateInterpretation(optIdx, lambda, costs) {
+    const best = artifactData[optIdx].name;
+    const { secondCost } = bestArtifacts(costs);
+    const margin = Number.isFinite(secondCost) ? (secondCost - costs[optIdx]) : NaN;
+    const marginTxt = Number.isFinite(margin) ? `Margin to 2nd-best: <strong>${fmt(margin)}</strong>.` : '';
+    interpretationText.innerHTML = `
+      <p>At λ = <strong>${fmt(lambda,1)}</strong>, <strong style="color: var(--teal)">${best}</strong> is optimal.</p>
+      <p class="muted mt-1">Cost = λ·FP + FN. Lower is better. ${marginTxt}</p>
+      <p class="muted mt-1">Metrics: TP = P − FN, TN = N − FP; Precision = TP/(TP+FP), Recall = TP/P, F1 = 2PR/(P+R).</p>
+    `;
+    marginNote.textContent = Number.isFinite(margin) ? `2nd-best margin: ${fmt(margin)}. Small margin ⇒ fragile choice.` : '';
+  }
+
+  // ---------- MASTER UPDATE ----------
+  function updateAll() {
+    // λ
+    const raw = parseFloat(lambdaSlider.value);
+    currentLambda = clamp(Number.isFinite(raw) ? raw : currentLambda, sliderMin, sliderMax);
+    lambdaSlider.value = currentLambda.toFixed(1);
+    lambdaValueDisplay.innerHTML = `<span class="mono">λ</span> = ${fmt(currentLambda,1)}`;
+    ecCaption.textContent = `E[C] @ λ = ${fmt(currentLambda,1)}`;
+    ecHeader.textContent  = `E[C] @ λ = ${fmt(currentLambda,1)}`;
+
+    // Totals
+    totals.P = safeInt(totalPInput.value);
+    totals.N = safeInt(totalNInput.value);
+    const maxFN = Math.max(0, ...artifactData.map(a => a.fn));
+    const maxFP = Math.max(0, ...artifactData.map(a => a.fp));
+
+    if (!Number.isFinite(totals.P) || totals.P < maxFN || !Number.isFinite(totals.N) || totals.N < maxFP) {
+      totalHint.className = 'text-sm';
+      totalHint.textContent = `Invalid totals: require P ≥ ${maxFN}, N ≥ ${maxFP}.`;
+    } else {
+      totalHint.className = 'text-sm muted';
+      totalHint.textContent = suggestTotalsText();
+    }
+
+    // Costs & best
+    const costs = artifactData.map(d => calculateCost(d.fp, d.fn, currentLambda));
+    const { bestIdx } = bestArtifacts(costs);
+
+    // Render
+    updateCostChart(costs, bestIdx);
+    renderTable(costs, bestIdx);
+    updateInterpretation(bestIdx, currentLambda, costs);
+
+    // PR/ROC chart
+    const mode = document.querySelector('input[name="metrics-mode"]:checked').value;
+    updateMetricsChart(mode);
+  }
+
+  // ---------- EVENTS ----------
+  document.addEventListener('DOMContentLoaded', () => {
+    lambdaSlider.addEventListener('input', updateAll);
+    totalPInput.addEventListener('input', updateAll);
+    totalNInput.addEventListener('input', updateAll);
+    suggestBtn.addEventListener('click', () => {
+      totalPInput.value = Math.max(0, ...artifactData.map(a => a.fn));
+      totalNInput.value = Math.max(0, ...artifactData.map(a => a.fp));
+      updateAll();
+      toast('Totals set to suggested minima');
+    });
+    document.querySelectorAll('input[name="metrics-mode"]').forEach(r => r.addEventListener('change', () => {
+      const mode = document.querySelector('input[name="metrics-mode"]:checked').value;
+      updateMetricsChart(mode);
+    }));
+
+    exportCsvBtn.addEventListener('click', exportTableCSV);
+    exportJsonBtn.addEventListener('click', exportStateJSON);
+    exportCostPngBtn.addEventListener('click', () => { downloadCanvasPNG('costChart','cost_chart.png'); toast('Saved cost chart'); });
+    exportMetPngBtn.addEventListener('click', () => { downloadCanvasPNG('metricsChart','metrics_chart.png'); toast('Saved PR/ROC chart'); });
+    exportSweepPngBtn?.addEventListener('click', () => { downloadCanvasPNG('lambdaSweepChart','lambda_sweep.png'); toast('Saved sweep chart'); });
+    exportRegionsBtn?.addEventListener('click', exportRegionsCSV);
+
+    resetBtn.addEventListener('click', () => {
+      artifactData = [
+        { name: 'Artifact 1', fp: 50, fn: 10 },
+        { name: 'Artifact 2', fp: 40, fn: 12 },
+        { name: 'Artifact 3', fp: 30, fn: 25 },
+        { name: 'Artifact 4', fp: 20, fn: 30 },
+        { name: 'Artifact 5', fp: 10, fn: 50 },
+      ];
+      totals = { P: 100, N: 100 };
+      totalPInput.value = '100'; totalNInput.value = '100';
+      lambdaSlider.value = '2.1';
+      sweepCard.classList.add('hidden');
+      lambdaSweepChart && lambdaSweepChart.destroy(); lambdaSweepChart=null;
+      lastSweepRegions=null;
+      updateAll();
+      toast('Reset to demo defaults');
+    });
+
+    createCostChart();
+    createMetricsChart();
+    updateAll();
+  });
+
+  runSweepBtn.addEventListener('click', () => {
+    sweepCard.classList.remove('hidden');
+    computeAndRenderSweep();
+    toast('Computed optimal regions');
+  });
+
+})();
+</script>
+</body>
+</html>
